@@ -1,0 +1,4 @@
+pandas~=1.4.1
+numpy~=1.22.2
+pymorphy2~=0.9.1
+tensorflow~=2.8.0
