@@ -51,6 +51,31 @@ def text_cleaner(text):
     return text
 
 
+def load_data_from_arrays(strings, labels, train_test_split=0.9):
+    """
+    Разбивание Dataset на обучающую и проверочную выборки, по умолчанию 90% - обучающая
+    Вход: Dataset, % обучающей выборки
+    Выход: выборки
+    """
+    data_size = len(strings)
+    test_size = int(data_size - round(data_size * train_test_split))
+    print("Test size: {}".format(test_size))
+
+    print("\nTraining set:")
+    x_train = strings[test_size:]
+    print("\t - x_train: {}".format(len(x_train)))
+    y_train = labels[test_size:]
+    print("\t - y_train: {}".format(len(y_train)))
+
+    print("\nTesting set:")
+    x_test = strings[:test_size]
+    print("\t - x_test: {}".format(len(x_test)))
+    y_test = labels[:test_size]
+    print("\t - y_test: {}".format(len(y_test)))
+
+    return x_train, y_train, x_test, y_test
+
+
 def main():
     """
     Главная функция
@@ -82,10 +107,38 @@ def main():
     categories = {}
     for key, value in enumerate(pandasf['topics'].unique()):
         categories[value] = key
-    pandasf['category_code'] = pandasf['topics'].map(categories)
+    pandasf['topics_code'] = pandasf['topics'].map(categories)
     total_categories = len(pandasf['topics'].unique())
 
     print('Всего категорий: {0}, {1}'.format(total_categories, pandasf['topics'].unique()))
+
+    # перемешивание Dataset
+    pandasf = pandasf.sample(frac=1).reset_index(drop=True)
+
+    text = pandasf['clean_text']
+    topics = pandasf['topics_code']
+
+    # максимальная длина текста в словах
+    max_words = 0
+    for i in text:
+        words = len(i.split())
+        if words > max_words:
+            max_words = words
+    print('Max word count in texts: {} words'.format(max_words))
+
+    # единый словарь (слово -> число) для преобразования
+    tokenizer = Tokenizer()
+    tokenizer.fit_on_texts([x.decode('utf-8') for x in text.tolist()])
+
+    # преобразование всех описаний в числовые последовательности, заменяя слова на числа по словарю
+    text_sequences = tokenizer.texts_to_sequences([x.decode('utf-8') for x in text.tolist()])
+
+    # разбивание Dataset на обучающую и проверочную выборки
+    x_train, y_train, x_test, y_test = load_data_from_arrays(text_sequences, topics, train_test_split=0.8)
+
+    # вывод количества всех слов
+    total_words = len(tokenizer.word_index)
+    print('{} words in dictionary'.format(total_words))
 
 
 if __name__ == '__main__':
