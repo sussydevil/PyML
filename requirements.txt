@@ -3,3 +3,5 @@ numpy~=1.22.2
 pymorphy2~=0.9.1
 tensorflow~=2.8.0
 keras~=2.8.0
+scikit-learn~=1.0.2
+matplotlib~=3.5.1

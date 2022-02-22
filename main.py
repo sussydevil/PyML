@@ -1,13 +1,26 @@
+# -*- coding: utf-8 -*-
+from keras.preprocessing.sequence import pad_sequences
+from keras.layers import Dense, Embedding, LSTM
 from keras.preprocessing.text import Tokenizer
-from numpy import compat
+from keras.callbacks import ModelCheckpoint
+from keras.models import Sequential
+from keras.utils import np_utils
+import matplotlib.pyplot as plt
+from keras import utils
 from time import sleep
 import pandas as pd
 import numpy as np
 import pymorphy2
-import os
 import re
 
 
+# максимальное количество слов
+num_words = 10000
+# максимальная длина новости
+max_news_len = 2000
+# количество классов новостей
+nb_classes = 10
+# объект для чистки текста
 ma = pymorphy2.MorphAnalyzer()
 
 
@@ -16,12 +29,10 @@ def file_cleaner(pandasf, column_array):
     Очистка ненужных колонок и пустых строк
     Вход: исходный файл, массив названий колонок
     """
-    print("Deleting unused columns...")
+    print("Deleting unused columns and null rows...")
     for i in column_array:
         pandasf.drop(i, axis='columns', inplace=True)
-    print("Done.")
 
-    print("Deleting null rows...")
     pandasf['text'].replace('', np.nan, inplace=True)
     pandasf.dropna(subset=['text'], inplace=True)
 
@@ -30,7 +41,7 @@ def file_cleaner(pandasf, column_array):
 
     pandasf['title'].replace('', np.nan, inplace=True)
     pandasf.dropna(subset=['title'], inplace=True)
-    print("Done.")
+    print("Deleting unused columns and null rows done.")
 
     return pandasf
 
@@ -41,104 +52,110 @@ def text_cleaner(text):
     Вход: грязный текст
     Выход: очищенный текст
     """
-    text = text.replace("\\", " ").replace(u"╚", " ").replace(u"╩", " ")
     text = text.lower()
     text = re.sub(r'\s\r\n\s+|\s\r\n|\r\n', '', text)
-    text = re.sub(r'[.,:;_%©?*!@#$^&()\d]|[+=]|[\[]]|[/]|"|\s{2,}|-', ' ', text)
-    text = " ".join(ma.parse(compat.unicode(word))[0].normal_form for word in text.split())
+    text = re.sub(r'[.,:;_% ​"»«©?*/!@#$^&()\d]|[+=]|[\[]]|-|[a-z]|[A-Z]', ' ', text)
     text = ' '.join(word for word in text.split() if len(word) > 3)
-    text = text.encode("utf-8")
+
     return text
-
-
-def load_data_from_arrays(strings, labels, train_test_split=0.9):
-    """
-    Разбивание Dataset на обучающую и проверочную выборки, по умолчанию 90% - обучающая
-    Вход: Dataset, % обучающей выборки
-    Выход: выборки
-    """
-    data_size = len(strings)
-    test_size = int(data_size - round(data_size * train_test_split))
-    print("Test size: {}".format(test_size))
-
-    print("\nTraining set:")
-    x_train = strings[test_size:]
-    print("\t - x_train: {}".format(len(x_train)))
-    y_train = labels[test_size:]
-    print("\t - y_train: {}".format(len(y_train)))
-
-    print("\nTesting set:")
-    x_test = strings[:test_size]
-    print("\t - x_test: {}".format(len(x_test)))
-    y_test = labels[:test_size]
-    print("\t - y_test: {}".format(len(y_test)))
-
-    return x_train, y_train, x_test, y_test
 
 
 def main():
     """
     Главная функция
     """
-    # чтение файла, удаление ненужной информации (даты, репосты и т.д.)
-    if not os.path.exists('rt.pkl'):
-        print("File without unusable columns and null rows not found, creating from original...")
-        pandasf = pd.read_csv('rt.csv')
-        pandasf = file_cleaner(pandasf,
-                               ['authors', 'date', 'url', 'edition', 'reposts_fb', 'reposts_vk', 'reposts_ok',
-                                'reposts_twi', 'reposts_lj', 'reposts_tg', 'likes', 'views', 'comm_count'])
-        pandasf.to_pickle('rt.pkl')
-        print("File created successfully.")
-    else:
-        print("File without unusable columns and null rows found.")
-        pandasf = pd.read_pickle('rt.pkl')
+    print("News analyzer started (v.0.1.0)...")
+    sleep(1)
+    # чтение файла, удаление ненужной информации (даты, репосты и т.д.), очистка null строк
+    pandasf = pd.read_csv('rt.csv')
+    pandasf = file_cleaner(pandasf,
+                           ['authors', 'date', 'url', 'edition', 'reposts_fb', 'reposts_vk', 'reposts_ok',
+                            'reposts_twi', 'reposts_lj', 'reposts_tg', 'likes', 'views', 'comm_count'])
 
-    # очистка текста
-    if not os.path.exists("rt_clean.pkl"):
-        print("Clean file not found, creating... It may take a long time.")
-        pandasf['clean_text'] = pandasf.apply(lambda x: text_cleaner(x['text']), axis=1)
-        pandasf.to_pickle("rt_clean.pkl")
-        print("Cleaning done.")
-    else:
-        print("Clean file found.")
-        pandasf = pd.read_pickle("rt_clean.pkl")
+    # очистка текста от символов и предлогов
+    print("Cleaning of symbols and pretexts...")
+    pandasf['text'] = pandasf.apply(lambda x: text_cleaner(x['text']), axis=1)
+    pandasf['title'] = pandasf.apply(lambda x: text_cleaner(x['title']), axis=1)
+    print("Cleaning of symbols and pretexts done.")
 
     # выделение категорий
     categories = {}
     for key, value in enumerate(pandasf['topics'].unique()):
         categories[value] = key
-    pandasf['topics_code'] = pandasf['topics'].map(categories)
-    total_categories = len(pandasf['topics'].unique())
+    print("Categories: {0}".format(categories))
 
-    print('Всего категорий: {0}, {1}'.format(total_categories, pandasf['topics'].unique()))
+    # конвертирование категорий в числа
+    pandasf['topics_code'] = pandasf['topics'].map(categories)
+
+    # удаление topics из файла, т.к. есть topics_code
+    pandasf.drop("topics", axis='columns', inplace=True)
 
     # перемешивание Dataset
     pandasf = pandasf.sample(frac=1).reset_index(drop=True)
 
-    text = pandasf['clean_text']
-    topics = pandasf['topics_code']
-
-    # максимальная длина текста в словах
+    # вычисление максимальной длины текста в словах
     max_words = 0
-    for i in text:
+    for i in pandasf['text']:
         words = len(i.split())
         if words > max_words:
             max_words = words
-    print('Max word count in texts: {} words'.format(max_words))
+    print('Max word count in news: {} words'.format(max_words))
 
-    # единый словарь (слово -> число) для преобразования
-    tokenizer = Tokenizer()
-    tokenizer.fit_on_texts([x.decode('utf-8') for x in text.tolist()])
+    # подготовка данных
+    news_text = pandasf['text']
+    y_train = utils.np_utils.to_categorical(pandasf['topics_code'], nb_classes)
+    tokenizer = Tokenizer(num_words=num_words)
+    tokenizer.fit_on_texts(news_text)
+    sequences = tokenizer.texts_to_sequences(news_text)
+    x_train = pad_sequences(sequences, maxlen=max_news_len)
 
-    # преобразование всех описаний в числовые последовательности, заменяя слова на числа по словарю
-    text_sequences = tokenizer.texts_to_sequences([x.decode('utf-8') for x in text.tolist()])
+    # LSTM нейронная сеть
+    model_lstm = Sequential()
+    model_lstm.add(Embedding(num_words, 32, input_length=max_news_len))
+    model_lstm.add(LSTM(16))
+    model_lstm.add(Dense(10, activation='softmax'))
+    model_lstm.compile(optimizer='adam',
+                       loss='categorical_crossentropy',
+                       metrics=['accuracy'])
+    model_lstm.summary()
 
-    # разбивание Dataset на обучающую и проверочную выборки
-    x_train, y_train, x_test, y_test = load_data_from_arrays(text_sequences, topics, train_test_split=0.8)
+    # callback для сохранения нейронной сети на каждой эпохе
+    model_lstm_save_path = 'lstm_model.h5'
+    checkpoint_callback_lstm = ModelCheckpoint(model_lstm_save_path,
+                                               monitor='val_accuracy',
+                                               save_best_only=True,
+                                               verbose=1)
 
-    # вывод количества всех слов
-    total_words = len(tokenizer.word_index)
-    print('{} words in dictionary'.format(total_words))
+    history_lstm = model_lstm.fit(x_train,
+                                  y_train,
+                                  epochs=5,
+                                  batch_size=128,
+                                  validation_split=0.1,
+                                  callbacks=[checkpoint_callback_lstm])
+
+    # построение графика в matplotlib
+    plt.plot(history_lstm.history['accuracy'], label='Доля верных ответов на обучающем наборе')
+    plt.plot(history_lstm.history['val_accuracy'], label='Доля верных ответов на проверочном наборе')
+    plt.xlabel('Эпоха обучения')
+    plt.ylabel('Доля верных ответов')
+    plt.legend()
+    plt.show()
+
+    # загрузка набора данных для тестирования
+    test = pd.read_csv('test.csv',
+                       header=None,
+                       names=['class', 'title', 'text'])
+
+    # преобразование новости в числовое представление, используя токенизатор, обученный на наборе данных train
+    test_sequences = tokenizer.texts_to_sequences(test['text'])
+    x_test = pad_sequences(test_sequences, maxlen=max_news_len)
+
+    # Правильные ответы
+    y_test = utils.np_utils.to_categorical(test['class'] - 1, nb_classes)
+
+    # оценка качества работы сети на тестовом наборе данных
+    model_lstm.load_weights(model_lstm_save_path)
+    model_lstm.evaluate(x_test, y_test, verbose=1)
 
 
 if __name__ == '__main__':
