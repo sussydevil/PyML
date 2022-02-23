@@ -5,6 +5,7 @@ from keras.layers import Dense, Embedding, LSTM
 from keras.preprocessing.text import Tokenizer
 from keras.callbacks import ModelCheckpoint
 from keras.models import Sequential
+from keras.models import load_model
 from keras.utils import np_utils
 from termcolor import colored
 from keras import utils
@@ -18,15 +19,15 @@ import argparse
 import re
 
 # максимальное количество слов
-num_words = 5000
+num_words = 50
 # максимальная длина новости
 max_news_len = 100
-# количество классов новостей
-nb_classes = 10
+# количество классов новостей, считается ниже
+nb_classes = 0
 # объект для чистки текста
 ma = pymorphy2.MorphAnalyzer()
 # процент обучающей выборки
-learn_percentage = 0.95
+learn_percentage = 0.85
 
 
 def file_cleaner(pandasf, column_array):
@@ -68,11 +69,17 @@ def train():
     Функция обучения
     """
     # чтение файла, удаление ненужной информации (даты, репосты и т.д.), очистка null строк
-    print(colored("Train module started...", "yellow"))
-    sleep(1)
+    print("-----------------------------------------------------------------")
+    print(colored("Train module started...\nParameters: "
+                  "\nNumber of words: {0}"
+                  "\nMax length of news: {1}"
+                  "\nLearn percentage (volume): {2}", "yellow").format(num_words, max_news_len, learn_percentage))
+    print("-----------------------------------------------------------------")
+    sleep(2)
     print(colored(">>> Reading rt.csv...", "yellow"))
     pandasf = pd.read_csv('rt.csv')
     print(colored(">>> Reading done.", "green"))
+    print("-----------------------------------------------------------------")
 
     # очистка текста от символов и предлогов
     print(colored(">>> Cleaning file of symbols, pretexts and unusable columns...", "yellow"))
@@ -82,12 +89,20 @@ def train():
     pandasf['text'] = pandasf.apply(lambda x: text_cleaner(x['text']), axis=1)
     pandasf['title'] = pandasf.apply(lambda x: text_cleaner(x['title']), axis=1)
     print(colored(">>> Cleaning file of symbols, pretexts and unusable columns done.", "green"))
+    print("-----------------------------------------------------------------")
 
     # выделение категорий
     categories = {}
+    print("Categories are:")
     for key, value in enumerate(pandasf['topics'].unique()):
         categories[value] = key
-    print("Categories are: {0}".format(categories))
+        print("{0}) {1}".format(key, value))
+
+    # расчет количества категорий
+    global nb_classes
+    nb_classes = len(categories)
+    print("Category count is: {0}".format(nb_classes))
+    print("-----------------------------------------------------------------")
 
     # конвертирование категорий в числа
     pandasf['topics_code'] = pandasf['topics'].map(categories)
@@ -111,6 +126,7 @@ def train():
         if words > max_words:
             max_words = words
     print('Max word count in news: {} words'.format(max_words))
+    print("-----------------------------------------------------------------")
 
     # подготовка данных
     print(colored(">>> Dataset preparation...", "yellow"))
@@ -121,6 +137,7 @@ def train():
     sequences = tokenizer.texts_to_sequences(news_text)
     x_train = pad_sequences(sequences, maxlen=max_news_len)
     print(colored(">>> Dataset preparation done.", "green"))
+    print("-----------------------------------------------------------------")
 
     print(colored(">>> Learning started.", "yellow"))
     # LSTM нейронная сеть
@@ -147,6 +164,7 @@ def train():
                                   validation_split=0.1,
                                   callbacks=[checkpoint_callback_lstm])
     print(colored(">>> Learning done. Model saved to lstm_model.h5.", "green"))
+    print("-----------------------------------------------------------------")
     print(colored(">>> Plotting in matplotlib...", "yellow"))
     # построение графика в matplotlib
     plt.plot(history_lstm.history['accuracy'], label='Share of correct answers on learning Dataset')
@@ -155,6 +173,7 @@ def train():
     plt.ylabel('Share of correct answers')
     plt.legend()
     print(colored(">>> Plotting done.", "green"))
+    print("-----------------------------------------------------------------")
     plt.show()
 
     # загрузка набора данных для тестирования (выше)
@@ -162,7 +181,6 @@ def train():
     print(colored(">>> Testing on test Dataset...", "yellow"))
     test_sequences = tokenizer.texts_to_sequences(test['text'])
     x_test = pad_sequences(test_sequences, maxlen=max_news_len)
-
     # Правильные ответы
     y_test = utils.np_utils.to_categorical(test['topics_code'], nb_classes)
 
@@ -170,11 +188,25 @@ def train():
     model_lstm.load_weights(model_lstm_save_path)
     model_lstm.evaluate(x_test, y_test, verbose=1)
     print(colored(">>> Testing done.", "green"))
+    print("-----------------------------------------------------------------")
     print(colored(">>> Learning done! Exiting...", "green"))
 
 
 def api():
     print("In dev.")
+
+    # load model
+    model = load_model('lstm_model.h5')
+    # summarize model.
+    model.summary()
+    # load dataset
+    # dataset = loadtxt("pima-indians-diabetes.csv", delimiter=",")
+    # split into input (X) and output (Y) variables
+    # X = dataset[:, 0:8]
+    # Y = dataset[:, 8]
+    # evaluate the model
+    # score = model.evaluate(X, Y, verbose=0)
+    # print("%s: %.2f%%" % (model.metrics_names[1], score[1] * 100))
 
 
 def main():
