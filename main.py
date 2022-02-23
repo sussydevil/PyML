@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
+
 from keras.preprocessing.sequence import pad_sequences
 from keras.layers import Dense, Embedding, LSTM
 from keras.preprocessing.text import Tokenizer
 from keras.callbacks import ModelCheckpoint
 from keras.models import Sequential
 from keras.utils import np_utils
-import matplotlib.pyplot as plt
 from termcolor import colored
 from keras import utils
 from time import sleep
+
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import pymorphy2
-
+import argparse
 import re
 
 # максимальное количество слов
@@ -61,11 +63,13 @@ def text_cleaner(text):
     return text
 
 
-def learning():
+def train():
     """
     Функция обучения
     """
     # чтение файла, удаление ненужной информации (даты, репосты и т.д.), очистка null строк
+    print(colored("Train module started...", "yellow"))
+    sleep(1)
     print(colored(">>> Reading rt.csv...", "yellow"))
     pandasf = pd.read_csv('rt.csv')
     print(colored(">>> Reading done.", "green"))
@@ -169,13 +173,50 @@ def learning():
     print(colored(">>> Learning done! Exiting...", "green"))
 
 
+def api():
+    print("In dev.")
+
+
 def main():
     """
     Главная функция
     """
-    print("News analyzer started (v.0.1.0)...")
-    sleep(2)
-    learning()
+    print("AI news analyzer started (v.0.2.0)...")
+    sleep(1)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-mode', action='store', dest='mode', help='Mode can be "train" or "api"')
+
+    if parser.parse_args().mode == "train":
+        train()
+        exit(0)
+    elif parser.parse_args().mode == "api":
+        api()
+        exit(0)
+    else:
+        print(colored("Argv not recognized. Then menu is on.", "red"))
+
+    error = False
+
+    while True:
+        if not error:
+            print(colored("Please choose what you want to do:\n1) Train model\n2) Use model (enable API)", "yellow"))
+        answer = input('>>> ')
+        try:
+            answer = int(answer)
+        except ValueError:
+            print(colored('Convert error to int. Try again.', 'red'))
+            error = True
+            continue
+        if answer not in {1, 2}:
+            print(colored("Selection error. Try again.", "red"))
+            error = True
+            continue
+        if answer == 1:
+            train()
+        if answer == 2:
+            api()
+        error = False
 
 
 if __name__ == '__main__':
