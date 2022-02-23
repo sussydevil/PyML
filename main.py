@@ -6,22 +6,25 @@ from keras.callbacks import ModelCheckpoint
 from keras.models import Sequential
 from keras.utils import np_utils
 import matplotlib.pyplot as plt
+from termcolor import colored
 from keras import utils
 from time import sleep
 import pandas as pd
 import numpy as np
 import pymorphy2
+
 import re
 
-
 # максимальное количество слов
-num_words = 10000
+num_words = 5000
 # максимальная длина новости
-max_news_len = 2000
+max_news_len = 100
 # количество классов новостей
 nb_classes = 10
 # объект для чистки текста
 ma = pymorphy2.MorphAnalyzer()
+# процент обучающей выборки
+learn_percentage = 0.95
 
 
 def file_cleaner(pandasf, column_array):
@@ -29,7 +32,6 @@ def file_cleaner(pandasf, column_array):
     Очистка ненужных колонок и пустых строк
     Вход: исходный файл, массив названий колонок
     """
-    print("Deleting unused columns and null rows...")
     for i in column_array:
         pandasf.drop(i, axis='columns', inplace=True)
 
@@ -41,7 +43,6 @@ def file_cleaner(pandasf, column_array):
 
     pandasf['title'].replace('', np.nan, inplace=True)
     pandasf.dropna(subset=['title'], inplace=True)
-    print("Deleting unused columns and null rows done.")
 
     return pandasf
 
@@ -60,29 +61,29 @@ def text_cleaner(text):
     return text
 
 
-def main():
+def learning():
     """
-    Главная функция
+    Функция обучения
     """
-    print("News analyzer started (v.0.1.0)...")
-    sleep(1)
     # чтение файла, удаление ненужной информации (даты, репосты и т.д.), очистка null строк
+    print(colored(">>> Reading rt.csv...", "yellow"))
     pandasf = pd.read_csv('rt.csv')
+    print(colored(">>> Reading done.", "green"))
+
+    # очистка текста от символов и предлогов
+    print(colored(">>> Cleaning file of symbols, pretexts and unusable columns...", "yellow"))
     pandasf = file_cleaner(pandasf,
                            ['authors', 'date', 'url', 'edition', 'reposts_fb', 'reposts_vk', 'reposts_ok',
                             'reposts_twi', 'reposts_lj', 'reposts_tg', 'likes', 'views', 'comm_count'])
-
-    # очистка текста от символов и предлогов
-    print("Cleaning of symbols and pretexts...")
     pandasf['text'] = pandasf.apply(lambda x: text_cleaner(x['text']), axis=1)
     pandasf['title'] = pandasf.apply(lambda x: text_cleaner(x['title']), axis=1)
-    print("Cleaning of symbols and pretexts done.")
+    print(colored(">>> Cleaning file of symbols, pretexts and unusable columns done.", "green"))
 
     # выделение категорий
     categories = {}
     for key, value in enumerate(pandasf['topics'].unique()):
         categories[value] = key
-    print("Categories: {0}".format(categories))
+    print("Categories are: {0}".format(categories))
 
     # конвертирование категорий в числа
     pandasf['topics_code'] = pandasf['topics'].map(categories)
@@ -93,6 +94,12 @@ def main():
     # перемешивание Dataset
     pandasf = pandasf.sample(frac=1).reset_index(drop=True)
 
+    # разбивание Dataset на обучающую и тестовую выборки
+    str_count = len(pandasf.index)
+    pointer = int(str_count * learn_percentage)
+    test = pandasf.iloc[pointer + 1:, :]
+    pandasf = pandasf.iloc[:pointer, :]
+
     # вычисление максимальной длины текста в словах
     max_words = 0
     for i in pandasf['text']:
@@ -102,13 +109,16 @@ def main():
     print('Max word count in news: {} words'.format(max_words))
 
     # подготовка данных
+    print(colored(">>> Dataset preparation...", "yellow"))
     news_text = pandasf['text']
     y_train = utils.np_utils.to_categorical(pandasf['topics_code'], nb_classes)
     tokenizer = Tokenizer(num_words=num_words)
     tokenizer.fit_on_texts(news_text)
     sequences = tokenizer.texts_to_sequences(news_text)
     x_train = pad_sequences(sequences, maxlen=max_news_len)
+    print(colored(">>> Dataset preparation done.", "green"))
 
+    print(colored(">>> Learning started.", "yellow"))
     # LSTM нейронная сеть
     model_lstm = Sequential()
     model_lstm.add(Embedding(num_words, 32, input_length=max_news_len))
@@ -132,30 +142,40 @@ def main():
                                   batch_size=128,
                                   validation_split=0.1,
                                   callbacks=[checkpoint_callback_lstm])
-
+    print(colored(">>> Learning done. Model saved to lstm_model.h5.", "green"))
+    print(colored(">>> Plotting in matplotlib...", "yellow"))
     # построение графика в matplotlib
-    plt.plot(history_lstm.history['accuracy'], label='Доля верных ответов на обучающем наборе')
-    plt.plot(history_lstm.history['val_accuracy'], label='Доля верных ответов на проверочном наборе')
-    plt.xlabel('Эпоха обучения')
-    plt.ylabel('Доля верных ответов')
+    plt.plot(history_lstm.history['accuracy'], label='Share of correct answers on learning Dataset')
+    plt.plot(history_lstm.history['val_accuracy'], label='Share of correct answers on test Dataset')
+    plt.xlabel('Epoch')
+    plt.ylabel('Share of correct answers')
     plt.legend()
+    print(colored(">>> Plotting done.", "green"))
     plt.show()
 
-    # загрузка набора данных для тестирования
-    test = pd.read_csv('test.csv',
-                       header=None,
-                       names=['class', 'title', 'text'])
-
+    # загрузка набора данных для тестирования (выше)
     # преобразование новости в числовое представление, используя токенизатор, обученный на наборе данных train
+    print(colored(">>> Testing on test Dataset...", "yellow"))
     test_sequences = tokenizer.texts_to_sequences(test['text'])
     x_test = pad_sequences(test_sequences, maxlen=max_news_len)
 
     # Правильные ответы
-    y_test = utils.np_utils.to_categorical(test['class'] - 1, nb_classes)
+    y_test = utils.np_utils.to_categorical(test['topics_code'], nb_classes)
 
     # оценка качества работы сети на тестовом наборе данных
     model_lstm.load_weights(model_lstm_save_path)
     model_lstm.evaluate(x_test, y_test, verbose=1)
+    print(colored(">>> Testing done.", "green"))
+    print(colored(">>> Learning done! Exiting...", "green"))
+
+
+def main():
+    """
+    Главная функция
+    """
+    print("News analyzer started (v.0.1.0)...")
+    sleep(2)
+    learning()
 
 
 if __name__ == '__main__':
