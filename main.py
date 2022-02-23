@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+import keras.preprocessing.text
 from keras.preprocessing.sequence import pad_sequences
 from keras.layers import Dense, Embedding, LSTM
 from keras.preprocessing.text import Tokenizer
@@ -19,15 +19,15 @@ import argparse
 import re
 
 # максимальное количество слов
-num_words = 50
+num_words = 100000
 # максимальная длина новости
-max_news_len = 100
+max_news_len = 2500
 # количество классов новостей, считается ниже
 nb_classes = 0
 # объект для чистки текста
 ma = pymorphy2.MorphAnalyzer()
 # процент обучающей выборки
-learn_percentage = 0.85
+learn_percentage = 0.95
 
 
 def file_cleaner(pandasf, column_array):
@@ -163,6 +163,11 @@ def train():
                                   batch_size=128,
                                   validation_split=0.1,
                                   callbacks=[checkpoint_callback_lstm])
+
+    # сохранение tokenizer в json
+    with open("tokenizer.json", "w") as f:
+        f.write(tokenizer.to_json())
+
     print(colored(">>> Learning done. Model saved to lstm_model.h5.", "green"))
     print("-----------------------------------------------------------------")
     print(colored(">>> Plotting in matplotlib...", "yellow"))
@@ -193,20 +198,23 @@ def train():
 
 
 def api():
-    print("In dev.")
-
-    # load model
     model = load_model('lstm_model.h5')
-    # summarize model.
     model.summary()
-    # load dataset
-    # dataset = loadtxt("pima-indians-diabetes.csv", delimiter=",")
-    # split into input (X) and output (Y) variables
-    # X = dataset[:, 0:8]
-    # Y = dataset[:, 8]
-    # evaluate the model
-    # score = model.evaluate(X, Y, verbose=0)
-    # print("%s: %.2f%%" % (model.metrics_names[1], score[1] * 100))
+
+    with open("tokenizer.json", "r") as f:
+        tokenizer_string = f.read()
+
+    tokenizer = keras.preprocessing.text.tokenizer_from_json(tokenizer_string)
+    pandasf = pd.read_csv("clean.csv")
+    pandasf = pandasf.iloc[100000:, :]
+
+    pandasf['text'].replace('', np.nan, inplace=True)
+    pandasf.dropna(subset=['text'], inplace=True)
+
+    test_sequences = tokenizer.texts_to_sequences(pandasf['text'])
+    x_test = pad_sequences(test_sequences, maxlen=max_news_len)
+    y_test = utils.np_utils.to_categorical(pandasf['topics_code'], nb_classes)
+    model.evaluate(x_test, y_test, verbose=1)
 
 
 def main():
