@@ -28,6 +28,8 @@ nb_classes = 0
 ma = pymorphy2.MorphAnalyzer()
 # процент обучающей выборки
 learn_percentage = 0.95
+# путь сохранения модели
+model_lstm_save_path = 'lstm_model.h5'
 
 
 def file_cleaner(pandasf, column_array):
@@ -151,7 +153,6 @@ def train():
     model_lstm.summary()
 
     # callback для сохранения нейронной сети на каждой эпохе
-    model_lstm_save_path = 'lstm_model.h5'
     checkpoint_callback_lstm = ModelCheckpoint(model_lstm_save_path,
                                                monitor='val_accuracy',
                                                save_best_only=True,
@@ -170,6 +171,8 @@ def train():
 
     print(colored(">>> Learning done. Model saved to lstm_model.h5.", "green"))
     print("-----------------------------------------------------------------")
+
+    """
     print(colored(">>> Plotting in matplotlib...", "yellow"))
     # построение графика в matplotlib
     plt.plot(history_lstm.history['accuracy'], label='Share of correct answers on learning Dataset')
@@ -195,33 +198,46 @@ def train():
     print(colored(">>> Testing done.", "green"))
     print("-----------------------------------------------------------------")
     print(colored(">>> Learning done! Exiting...", "green"))
+    """
 
 
 def api():
-    model = load_model('lstm_model.h5')
+    # загрузка модели
+    model = load_model(model_lstm_save_path, compile=True)
+
+    # вывод информации о модели
     model.summary()
 
+    # загрузка tokenizer
     with open("tokenizer.json", "r") as f:
         tokenizer_string = f.read()
-
     tokenizer = keras.preprocessing.text.tokenizer_from_json(tokenizer_string)
-    pandasf = pd.read_csv("clean.csv")
-    pandasf = pandasf.iloc[100000:, :]
 
+    # загрузка тестовых данных
+    pandasf = pd.read_csv("clean.csv")
+    pandasf = pandasf.iloc[100000:100200, :]
     pandasf['text'].replace('', np.nan, inplace=True)
     pandasf.dropna(subset=['text'], inplace=True)
+    text_array = pandasf['text']
 
-    test_sequences = tokenizer.texts_to_sequences(pandasf['text'])
+    # преобразование тестовых данных
+    test_sequences = tokenizer.texts_to_sequences(text_array)
     x_test = pad_sequences(test_sequences, maxlen=max_news_len)
-    y_test = utils.np_utils.to_categorical(pandasf['topics_code'], nb_classes)
-    model.evaluate(x_test, y_test, verbose=1)
+    pred = np.argmax(model.predict(x_test), axis=1)
+    ans = pandasf['topics_code'].to_numpy()
+
+    for i in range(len(ans)):
+        if int(pred[i]) != int(ans[i]):
+            print(colored("{0} -> {1}", "red").format(pred[i], ans[i]))
+        else:
+            print(colored("{0} -> {1}", "green").format(pred[i], ans[i]))
 
 
 def main():
     """
     Главная функция
     """
-    print("AI news analyzer started (v.0.2.0)...")
+    print("AI news analyzer started (v.0.3.0)...")
     sleep(1)
 
     parser = argparse.ArgumentParser()
