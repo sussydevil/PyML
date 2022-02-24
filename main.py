@@ -11,11 +11,11 @@ from termcolor import colored
 from keras import utils
 from time import sleep
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import pymorphy2
 import argparse
+import pickle
 import re
 
 # максимальное количество слов
@@ -95,10 +95,14 @@ def train():
 
     # выделение категорий
     categories = {}
-    print("Categories are:")
+    print("Categories are (saved to categories.pkl):")
     for key, value in enumerate(pandasf['topics'].unique()):
         categories[value] = key
         print("{0}) {1}".format(key, value))
+
+    # сохранение категорий в pickle
+    with open('categories.pkl', 'wb') as f:
+        pickle.dump(categories, f)
 
     # расчет количества категорий
     global nb_classes
@@ -115,10 +119,9 @@ def train():
     # перемешивание Dataset
     pandasf = pandasf.sample(frac=1).reset_index(drop=True)
 
-    # разбивание Dataset на обучающую и тестовую выборки
+    # разбивание Dataset, обычно для обучения используется 90-95%
     str_count = len(pandasf.index)
     pointer = int(str_count * learn_percentage)
-    test = pandasf.iloc[pointer + 1:, :]
     pandasf = pandasf.iloc[:pointer, :]
 
     # вычисление максимальной длины текста в словах
@@ -158,12 +161,12 @@ def train():
                                                save_best_only=True,
                                                verbose=1)
 
-    history_lstm = model_lstm.fit(x_train,
-                                  y_train,
-                                  epochs=5,
-                                  batch_size=128,
-                                  validation_split=0.1,
-                                  callbacks=[checkpoint_callback_lstm])
+    model_lstm.fit(x_train,
+                   y_train,
+                   epochs=5,
+                   batch_size=128,
+                   validation_split=0.1,
+                   callbacks=[checkpoint_callback_lstm])
 
     # сохранение tokenizer в json
     with open("tokenizer.json", "w") as f:
@@ -172,50 +175,37 @@ def train():
     print(colored(">>> Learning done. Model saved to lstm_model.h5.", "green"))
     print("-----------------------------------------------------------------")
 
-    """
-    print(colored(">>> Plotting in matplotlib...", "yellow"))
-    # построение графика в matplotlib
-    plt.plot(history_lstm.history['accuracy'], label='Share of correct answers on learning Dataset')
-    plt.plot(history_lstm.history['val_accuracy'], label='Share of correct answers on test Dataset')
-    plt.xlabel('Epoch')
-    plt.ylabel('Share of correct answers')
-    plt.legend()
-    print(colored(">>> Plotting done.", "green"))
-    print("-----------------------------------------------------------------")
-    plt.show()
 
-    # загрузка набора данных для тестирования (выше)
-    # преобразование новости в числовое представление, используя токенизатор, обученный на наборе данных train
-    print(colored(">>> Testing on test Dataset...", "yellow"))
-    test_sequences = tokenizer.texts_to_sequences(test['text'])
-    x_test = pad_sequences(test_sequences, maxlen=max_news_len)
-    # Правильные ответы
-    y_test = utils.np_utils.to_categorical(test['topics_code'], nb_classes)
-
-    # оценка качества работы сети на тестовом наборе данных
-    model_lstm.load_weights(model_lstm_save_path)
-    model_lstm.evaluate(x_test, y_test, verbose=1)
-    print(colored(">>> Testing done.", "green"))
-    print("-----------------------------------------------------------------")
-    print(colored(">>> Learning done! Exiting...", "green"))
+def get_key(d, value):
     """
+    Функция получения ключа по значению
+    Вход: словарь, значение
+    Выход: ключ
+    """
+    for k, v in d.items():
+        if v == value:
+            return k
 
 
 def api():
     # загрузка модели
     model = load_model(model_lstm_save_path, compile=True)
 
-    # вывод информации о модели
-    model.summary()
-
     # загрузка tokenizer
     with open("tokenizer.json", "r") as f:
         tokenizer_string = f.read()
     tokenizer = keras.preprocessing.text.tokenizer_from_json(tokenizer_string)
 
+    with open('categories.pkl', 'rb') as f:
+        categories = pickle.load(f)
+
+    # вывод информации о модели
+    model.summary()
+
+    """
     # загрузка тестовых данных
     pandasf = pd.read_csv("clean.csv")
-    pandasf = pandasf.iloc[100000:100200, :]
+    pandasf = pandasf.iloc[100000:100100, :]
     pandasf['text'].replace('', np.nan, inplace=True)
     pandasf.dropna(subset=['text'], inplace=True)
     text_array = pandasf['text']
@@ -223,14 +213,29 @@ def api():
     # преобразование тестовых данных
     test_sequences = tokenizer.texts_to_sequences(text_array)
     x_test = pad_sequences(test_sequences, maxlen=max_news_len)
-    pred = np.argmax(model.predict(x_test), axis=1)
+    predictions = np.argmax(model.predict(x_test), axis=1)
     ans = pandasf['topics_code'].to_numpy()
 
     for i in range(len(ans)):
-        if int(pred[i]) != int(ans[i]):
-            print(colored("{0} -> {1}", "red").format(pred[i], ans[i]))
+        pre = get_key(categories, predictions[i])
+        nast = get_key(categories, ans[i])
+        if int(predictions[i]) != int(ans[i]):
+            print(colored("{0} -> {1} | {2} -> {3}", "red").format(predictions[i], ans[i], pre, nast))
         else:
-            print(colored("{0} -> {1}", "green").format(pred[i], ans[i]))
+            print(colored("{0} -> {1} | {2} -> {3}", "green").format(predictions[i], ans[i], pre, nast))
+    """
+
+    while True:
+        text = input("Введите текст: ")
+        text = text_cleaner(text)
+        test_dict = [text]
+
+        df = pd.DataFrame(test_dict, columns=['text'])
+
+        test_sequ = tokenizer.texts_to_sequences(df["text"])
+        x_test_ = pad_sequences(test_sequ, maxlen=max_news_len)
+        prediction = np.argmax(model.predict(x_test_), axis=1)
+        print("{0} - {1}".format(prediction, get_key(categories, prediction)))
 
 
 def main():
