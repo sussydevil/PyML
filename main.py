@@ -202,39 +202,14 @@ def api():
     # вывод информации о модели
     model.summary()
 
-    """
-    # загрузка тестовых данных
-    pandasf = pd.read_csv("clean.csv")
-    pandasf = pandasf.iloc[100000:100100, :]
-    pandasf['text'].replace('', np.nan, inplace=True)
-    pandasf.dropna(subset=['text'], inplace=True)
-    text_array = pandasf['text']
-
-    # преобразование тестовых данных
-    test_sequences = tokenizer.texts_to_sequences(text_array)
-    x_test = pad_sequences(test_sequences, maxlen=max_news_len)
-    predictions = np.argmax(model.predict(x_test), axis=1)
-    ans = pandasf['topics_code'].to_numpy()
-
-    for i in range(len(ans)):
-        pre = get_key(categories, predictions[i])
-        nast = get_key(categories, ans[i])
-        if int(predictions[i]) != int(ans[i]):
-            print(colored("{0} -> {1} | {2} -> {3}", "red").format(predictions[i], ans[i], pre, nast))
-        else:
-            print(colored("{0} -> {1} | {2} -> {3}", "green").format(predictions[i], ans[i], pre, nast))
-    """
-
     while True:
-        text = input("Введите текст: ")
+        text = input("Enter news text: ")
         text = text_cleaner(text)
-        test_dict = [text]
-
-        df = pd.DataFrame(test_dict, columns=['text'])
-
-        test_sequ = tokenizer.texts_to_sequences(df["text"])
-        x_test_ = pad_sequences(test_sequ, maxlen=max_news_len)
-        prediction = np.argmax(model.predict(x_test_), axis=1)
+        pandas_list = [text]
+        pandasframe = pd.DataFrame(pandas_list, columns=['text'])
+        text_sequences = tokenizer.texts_to_sequences(pandasframe["text"])
+        x = pad_sequences(text_sequences, maxlen=max_news_len)
+        prediction = np.argmax(model.predict(x), axis=1)
         print("{0} - {1}".format(prediction, get_key(categories, prediction)))
 
 
@@ -242,7 +217,7 @@ def main():
     """
     Главная функция
     """
-    print("AI news analyzer started (v.0.3.0)...")
+    print("AI news analyzer started (v.0.9.0)...")
     sleep(1)
 
     parser = argparse.ArgumentParser()
