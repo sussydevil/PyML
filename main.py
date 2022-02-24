@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import keras.preprocessing.text
+
 from keras.preprocessing.sequence import pad_sequences
 from keras.layers import Dense, Embedding, LSTM
 from keras.preprocessing.text import Tokenizer
@@ -11,6 +11,7 @@ from termcolor import colored
 from keras import utils
 from time import sleep
 
+import keras.preprocessing.text
 import pandas as pd
 import numpy as np
 import pymorphy2
@@ -18,24 +19,31 @@ import argparse
 import pickle
 import re
 
-# максимальное количество слов
+# максимальное количество слов в словаре токенизатора
 num_words = 100000
 # максимальная длина новости
 max_news_len = 2500
 # количество классов новостей, считается ниже
-nb_classes = 0
+nb_classes = 10
 # объект для чистки текста
 ma = pymorphy2.MorphAnalyzer()
 # процент обучающей выборки
 learn_percentage = 0.95
 # путь сохранения модели
 model_lstm_save_path = 'lstm_model.h5'
+# путь исходного файла
+original_csv_path = 'rt.csv'
+# путь файла с категориями
+categories_path = "categories.pkl"
+# путь токенизатора
+tokenizer_path = "tokenizer.json"
 
 
 def file_cleaner(pandasf, column_array):
     """
     Очистка ненужных колонок и пустых строк
-    Вход: исходный файл, массив названий колонок
+    Вход: исходный dataset, массив названий колонок
+    Выход: очищенный dataset
     """
     for i in column_array:
         pandasf.drop(i, axis='columns', inplace=True)
@@ -72,14 +80,15 @@ def train():
     """
     # чтение файла, удаление ненужной информации (даты, репосты и т.д.), очистка null строк
     print("-----------------------------------------------------------------")
-    print(colored("Train module started...\nParameters: "
-                  "\nNumber of words: {0}"
-                  "\nMax length of news: {1}"
-                  "\nLearn percentage (volume): {2}", "yellow").format(num_words, max_news_len, learn_percentage))
+    print(colored("Train module started...", "yellow"))
+    print("Parameters: "
+          "\n - Number of words: {0}"
+          "\n - Max length of news: {1}"
+          "\n - Learn percentage (volume): {2}".format(num_words, max_news_len, learn_percentage))
     print("-----------------------------------------------------------------")
     sleep(2)
-    print(colored(">>> Reading rt.csv...", "yellow"))
-    pandasf = pd.read_csv('rt.csv')
+    print(colored(">>> Reading {0}...", "yellow").format(original_csv_path))
+    pandasf = pd.read_csv(original_csv_path)
     print(colored(">>> Reading done.", "green"))
     print("-----------------------------------------------------------------")
 
@@ -95,13 +104,13 @@ def train():
 
     # выделение категорий
     categories = {}
-    print("Categories are (saved to categories.pkl):")
+    print("Categories are (saved to {0}):".format(categories_path))
     for key, value in enumerate(pandasf['topics'].unique()):
         categories[value] = key
         print("{0}) {1}".format(key, value))
 
     # сохранение категорий в pickle
-    with open('categories.pkl', 'wb') as f:
+    with open(categories_path, 'wb') as f:
         pickle.dump(categories, f)
 
     # расчет количества категорий
@@ -116,10 +125,10 @@ def train():
     # удаление topics из файла, т.к. есть topics_code
     pandasf.drop("topics", axis='columns', inplace=True)
 
-    # перемешивание Dataset
+    # перемешивание dataset
     pandasf = pandasf.sample(frac=1).reset_index(drop=True)
 
-    # разбивание Dataset, обычно для обучения используется 90-95%
+    # разбивание dataset, обычно для обучения используется 90-95%
     str_count = len(pandasf.index)
     pointer = int(str_count * learn_percentage)
     pandasf = pandasf.iloc[:pointer, :]
@@ -161,6 +170,7 @@ def train():
                                                save_best_only=True,
                                                verbose=1)
 
+    # обучение
     model_lstm.fit(x_train,
                    y_train,
                    epochs=5,
@@ -169,7 +179,7 @@ def train():
                    callbacks=[checkpoint_callback_lstm])
 
     # сохранение tokenizer в json
-    with open("tokenizer.json", "w") as f:
+    with open(tokenizer_path, "w") as f:
         f.write(tokenizer.to_json())
 
     print(colored(">>> Learning done. Model saved to lstm_model.h5.", "green"))
@@ -192,15 +202,12 @@ def api():
     model = load_model(model_lstm_save_path, compile=True)
 
     # загрузка tokenizer
-    with open("tokenizer.json", "r") as f:
+    with open(tokenizer_path, "r") as f:
         tokenizer_string = f.read()
     tokenizer = keras.preprocessing.text.tokenizer_from_json(tokenizer_string)
 
-    with open('categories.pkl', 'rb') as f:
+    with open(categories_path, 'rb') as f:
         categories = pickle.load(f)
-
-    # вывод информации о модели
-    model.summary()
 
     while True:
         text = input("Enter news text: ")
@@ -215,7 +222,7 @@ def api():
 
 def main():
     """
-    Главная функция
+    Главная функция - парсинг параметров и меню
     """
     print("AI news analyzer started (v.0.9.0)...")
     sleep(1)
