@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 
 from keras.preprocessing.sequence import pad_sequences
+from jsonrpc import JSONRPCResponseManager, dispatcher
+from werkzeug.wrappers import Request, Response
 from keras.layers import Dense, Embedding, LSTM
 from keras.preprocessing.text import Tokenizer
 from keras.callbacks import ModelCheckpoint
+from werkzeug.serving import run_simple
 from keras.models import Sequential
 from keras.models import load_model
 from keras.utils import np_utils
@@ -37,6 +40,8 @@ original_csv_path = 'rt.csv'
 categories_path = "categories.pkl"
 # путь токенизатора
 tokenizer_path = "tokenizer.json"
+# глобальные переменные
+global gl_model, gl_tokenizer, gl_categories
 
 
 def file_cleaner(pandasf, column_array):
@@ -197,27 +202,32 @@ def get_key(d, value):
             return k
 
 
-def api():
-    # загрузка модели
-    model = load_model(model_lstm_save_path, compile=True)
+def api(text):
+    """
+    Функция для определения категории
+    Вход: текст
+    Выход: категория
+    """
+    text = text_cleaner(text)
+    pandas_list = [text]
+    pandasframe = pd.DataFrame(pandas_list, columns=['text'])
+    text_sequences = gl_tokenizer.texts_to_sequences(pandasframe["text"])
+    x = pad_sequences(text_sequences, maxlen=max_news_len)
+    prediction = np.argmax(gl_model.predict(x), axis=1)
 
-    # загрузка tokenizer
-    with open(tokenizer_path, "r") as f:
-        tokenizer_string = f.read()
-    tokenizer = keras.preprocessing.text.tokenizer_from_json(tokenizer_string)
+    return "{0} - {1}".format(prediction, get_key(gl_categories, prediction))
 
-    with open(categories_path, 'rb') as f:
-        categories = pickle.load(f)
 
-    while True:
-        text = input("Enter news text: ")
-        text = text_cleaner(text)
-        pandas_list = [text]
-        pandasframe = pd.DataFrame(pandas_list, columns=['text'])
-        text_sequences = tokenizer.texts_to_sequences(pandasframe["text"])
-        x = pad_sequences(text_sequences, maxlen=max_news_len)
-        prediction = np.argmax(model.predict(x), axis=1)
-        print("{0} - {1}".format(prediction, get_key(categories, prediction)))
+def parse_site(link):
+    print("In dev.")
+
+
+@Request.application
+def application(request):
+    dispatcher["text"] = lambda text: api(text)
+    dispatcher["link"] = lambda link: parse_site(link)
+    response = JSONRPCResponseManager.handle(request.data, dispatcher)
+    return Response(response.json, mimetype='application/json')
 
 
 def main():
@@ -234,7 +244,23 @@ def main():
         train()
         exit(0)
     elif parser.parse_args().mode == "api":
-        api()
+        print(colored(">>> Loading model for recognizing...", "yellow"))
+
+        global gl_model, gl_categories, gl_tokenizer
+        # загрузка модели
+        gl_model = load_model(model_lstm_save_path, compile=True)
+
+        # загрузка tokenizer
+        with open(tokenizer_path, "r") as f:
+            tokenizer_string = f.read()
+        gl_tokenizer = keras.preprocessing.text.tokenizer_from_json(tokenizer_string)
+
+        # загрузка категорий
+        with open(categories_path, 'rb') as f:
+            gl_categories = pickle.load(f)
+        print(colored(">>> Model loaded successfully...", "green"))
+
+        run_simple('0.0.0.0', 4000, application)
         exit(0)
     else:
         print(colored("Argv not recognized. Then menu is on.", "red"))
@@ -258,7 +284,22 @@ def main():
         if answer == 1:
             train()
         if answer == 2:
-            api()
+            print(colored(">>> Loading model for recognizing...", "yellow"))
+
+            # загрузка модели
+            gl_model = load_model(model_lstm_save_path, compile=True)
+
+            # загрузка tokenizer
+            with open(tokenizer_path, "r") as f:
+                tokenizer_string = f.read()
+            gl_tokenizer = keras.preprocessing.text.tokenizer_from_json(tokenizer_string)
+
+            # загрузка категорий
+            with open(categories_path, 'rb') as f:
+                gl_categories = pickle.load(f)
+            print(colored(">>> Model loaded...", "green"))
+
+            run_simple('0.0.0.0', 4000, application)
         error = False
 
 
