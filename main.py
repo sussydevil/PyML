@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 from keras.preprocessing.sequence import pad_sequences
 from jsonrpc import JSONRPCResponseManager, dispatcher
 from werkzeug.wrappers import Request, Response
@@ -7,6 +6,7 @@ from keras.layers import Dense, Embedding, LSTM
 from keras.preprocessing.text import Tokenizer
 from keras.callbacks import ModelCheckpoint
 from werkzeug.serving import run_simple
+from collections import OrderedDict
 from keras.models import Sequential
 from keras.models import load_model
 from keras.utils import np_utils
@@ -23,23 +23,32 @@ import pickle
 import re
 
 # максимальное количество слов в словаре токенизатора
-num_words = 100000
+num_words = 10000
+
 # максимальная длина новости
-max_news_len = 2500
+max_news_len = 250
+
 # количество классов новостей, считается ниже
 nb_classes = 10
+
 # объект для чистки текста
 ma = pymorphy2.MorphAnalyzer()
+
 # процент обучающей выборки
 learn_percentage = 0.95
+
 # путь сохранения модели
 model_lstm_save_path = 'lstm_model.h5'
+
 # путь исходного файла
 original_csv_path = 'rt.csv'
+
 # путь файла с категориями
 categories_path = "categories.pkl"
+
 # путь токенизатора
 tokenizer_path = "tokenizer.json"
+
 # глобальные переменные
 global gl_model, gl_tokenizer, gl_categories
 
@@ -71,9 +80,14 @@ def text_cleaner(text):
     Вход: грязный текст
     Выход: очищенный текст
     """
+    # строчные буквы
     text = text.lower()
+
+    # удаление лишних символов
     text = re.sub(r'\s\r\n\s+|\s\r\n|\r\n', '', text)
     text = re.sub(r'[.,:;_% ​"»«©?*/!@#$^&()\d]|[+=]|[\[]]|-|[a-z]|[A-Z]', ' ', text)
+
+    # удаление предлогов
     text = ' '.join(word for word in text.split() if len(word) > 3)
 
     return text
@@ -83,6 +97,7 @@ def train():
     """
     Функция обучения
     """
+
     # чтение файла, удаление ненужной информации (даты, репосты и т.д.), очистка null строк
     print("-----------------------------------------------------------------")
     print(colored("Train module started...", "yellow"))
@@ -108,7 +123,7 @@ def train():
     print("-----------------------------------------------------------------")
 
     # выделение категорий
-    categories = {}
+    categories = OrderedDict()
     print("Categories are (saved to {0}):".format(categories_path))
     for key, value in enumerate(pandasf['topics'].unique()):
         categories[value] = key
@@ -157,8 +172,8 @@ def train():
     x_train = pad_sequences(sequences, maxlen=max_news_len)
     print(colored(">>> Dataset preparation done.", "green"))
     print("-----------------------------------------------------------------")
-
     print(colored(">>> Learning started.", "yellow"))
+
     # LSTM нейронная сеть
     model_lstm = Sequential()
     model_lstm.add(Embedding(num_words, 32, input_length=max_news_len))
@@ -208,14 +223,30 @@ def api(text):
     Вход: текст
     Выход: категория
     """
+
+    # очистка текста новости
     text = text_cleaner(text)
+
+    # обработка текста новости
     pandas_list = [text]
     pandasframe = pd.DataFrame(pandas_list, columns=['text'])
     text_sequences = gl_tokenizer.texts_to_sequences(pandasframe["text"])
     x = pad_sequences(text_sequences, maxlen=max_news_len)
-    prediction = np.argmax(gl_model.predict(x), axis=1)
 
-    return "{0} - {1}".format(prediction, get_key(gl_categories, prediction))
+    # распознавание категории нейросетью
+    prediction = gl_model.predict(x).tolist()
+
+    # выходной словарь
+    output = OrderedDict()
+
+    # заполнение словаря
+    for i in range(len(prediction[0])):
+        output[list(gl_categories.items())[i][0]] = prediction[0][i]
+
+    # сортировка по значению
+    output = sorted(output.items(), key=lambda y: y[1], reverse=True)
+
+    return "{}".format(output)
 
 
 def parse_site(link):
@@ -236,17 +267,18 @@ def main():
     """
     print("AI news analyzer started (v.0.9.0)...")
     sleep(1)
-
+    global gl_model, gl_categories, gl_tokenizer
     parser = argparse.ArgumentParser()
-    parser.add_argument('-mode', action='store', dest='mode', help='Mode can be "train" or "api"')
+    parser.add_argument('-mode', action='store', dest='mode', help='Mode can be "train", "run" or "train&run"')
 
     if parser.parse_args().mode == "train":
         train()
         exit(0)
-    elif parser.parse_args().mode == "api":
+
+    elif parser.parse_args().mode == "run":
         print(colored(">>> Loading model for recognizing...", "yellow"))
 
-        global gl_model, gl_categories, gl_tokenizer
+
         # загрузка модели
         gl_model = load_model(model_lstm_save_path, compile=True)
 
@@ -262,6 +294,30 @@ def main():
 
         run_simple('0.0.0.0', 4000, application)
         exit(0)
+
+    elif parser.parse_args().mode == "train&run":
+        train()
+
+        print(colored(">>> Loading model for recognizing...", "yellow"))
+        # global gl_model, gl_categories, gl_tokenizer
+
+        # загрузка модели
+        gl_model = load_model(model_lstm_save_path, compile=True)
+
+        # загрузка tokenizer
+        with open(tokenizer_path, "r") as f:
+            tokenizer_string = f.read()
+        gl_tokenizer = keras.preprocessing.text.tokenizer_from_json(tokenizer_string)
+
+        # загрузка категорий
+        with open(categories_path, 'rb') as f:
+            gl_categories = pickle.load(f)
+        print(colored(">>> Model loaded successfully...", "green"))
+
+        run_simple('0.0.0.0', 4000, application)
+
+        exit(0)
+
     else:
         print(colored("Argv not recognized. Then menu is on.", "red"))
 
@@ -269,7 +325,7 @@ def main():
 
     while True:
         if not error:
-            print(colored("Please choose what you want to do:\n1) Train model\n2) Use model (enable API)", "yellow"))
+            print(colored("Please choose what you want to do:\n1) Train model\n2) Run model (enable API)", "yellow"))
         answer = input('>>> ')
         try:
             answer = int(answer)
