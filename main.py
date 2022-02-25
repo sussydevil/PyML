@@ -11,6 +11,7 @@ from keras.models import Sequential
 from keras.models import load_model
 from keras.utils import np_utils
 from termcolor import colored
+from bs4 import BeautifulSoup
 from keras import utils
 from time import sleep
 
@@ -18,15 +19,16 @@ import keras.preprocessing.text
 import pandas as pd
 import numpy as np
 import pymorphy2
+import requests
 import argparse
 import pickle
 import re
 
 # максимальное количество слов в словаре токенизатора
-num_words = 10000
+num_words = 100000
 
 # максимальная длина новости
-max_news_len = 250
+max_news_len = 2500
 
 # количество классов новостей, считается ниже
 nb_classes = 10
@@ -164,7 +166,7 @@ def train():
 
     # подготовка данных
     print(colored(">>> Dataset preparation...", "yellow"))
-    news_text = pandasf['text']
+    news_text = pandasf['title'] + pandasf['text']
     y_train = utils.np_utils.to_categorical(pandasf['topics_code'], nb_classes)
     tokenizer = Tokenizer(num_words=num_words)
     tokenizer.fit_on_texts(news_text)
@@ -221,7 +223,7 @@ def api(text):
     """
     Функция для определения категории
     Вход: текст
-    Выход: категория
+    Выход: словарь категорий с вероятностями
     """
 
     # очистка текста новости
@@ -249,15 +251,53 @@ def api(text):
     return "{}".format(output)
 
 
-def parse_site(link):
-    print("In dev.")
+def parse_site(url):
+    """
+    Функция парсинга url
+    Вход: url
+    Выход: текст новости -> словарь категорий с вероятностями
+    """
+
+    # получение html сайта
+    response = requests.get(url, headers={"user-agent": "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0) AppleWebKit/537.36 "
+                                                        "(KHTML, like Gecko) Chrome/51.0.2704.64 Safari/537.36"})
+    soup = BeautifulSoup(response.text, 'lxml')
+
+    # парсинг нужных блоков
+    article = soup.select('.article__heading_article-page')
+    article_summary = soup.select('.article__summary_article-page')
+    article_text = soup.select('.article__text_article-page p')
+
+    # переменные с готовым текстом
+    parsed_article = ""
+    parsed_summary = ""
+    parsed_text = ""
+
+    # запись текста в переменные
+    for i in article:
+        parsed_article = parsed_article + " " + i.text
+
+    for i in article_summary:
+        parsed_summary = parsed_summary + " " + i.text
+
+    for i in article_text:
+        parsed_text = parsed_text + " " + i.text
+
+    all_text = parsed_article + parsed_summary + parsed_text
+    api_answer = api(all_text)
+
+    return api_answer
 
 
 @Request.application
 def application(request):
+    """
+    Функция JSON-RPC сервера
+    """
     dispatcher["text"] = lambda text: api(text)
     dispatcher["link"] = lambda link: parse_site(link)
     response = JSONRPCResponseManager.handle(request.data, dispatcher)
+
     return Response(response.json, mimetype='application/json')
 
 
@@ -277,7 +317,6 @@ def main():
 
     elif parser.parse_args().mode == "run":
         print(colored(">>> Loading model for recognizing...", "yellow"))
-
 
         # загрузка модели
         gl_model = load_model(model_lstm_save_path, compile=True)
@@ -356,6 +395,7 @@ def main():
             print(colored(">>> Model loaded...", "green"))
 
             run_simple('0.0.0.0', 4000, application)
+
         error = False
 
 
