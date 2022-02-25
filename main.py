@@ -23,6 +23,7 @@ import requests
 import argparse
 import pickle
 import re
+import os
 
 # максимальное количество слов в словаре токенизатора
 num_words = 100000
@@ -335,10 +336,13 @@ def main():
         exit(0)
 
     elif parser.parse_args().mode == "train&run":
-        train()
+        if not os.path.exists(model_lstm_save_path):
+            train()
+        else:
+            print(colored('>>> Model found. Skipping training. '
+                          'If you to train a new model, reload app with "-mode train"', "green"))
 
         print(colored(">>> Loading model for recognizing...", "yellow"))
-        # global gl_model, gl_categories, gl_tokenizer
 
         # загрузка модели
         gl_model = load_model(model_lstm_save_path, compile=True)
