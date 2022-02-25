@@ -1,0 +1,5 @@
+/venv/
+categories.pkl
+lstm_model.h5
+tokenizer.json
+
