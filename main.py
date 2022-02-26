@@ -6,6 +6,7 @@ from keras.layers import Dense, Embedding, LSTM
 from keras.preprocessing.text import Tokenizer
 from keras.callbacks import ModelCheckpoint
 from werkzeug.serving import run_simple
+from fake_useragent import UserAgent
 from collections import OrderedDict
 from keras.models import Sequential
 from keras.models import load_model
@@ -262,9 +263,13 @@ def parse_site(url):
     """
 
     # получение html сайта
-    response = requests.get(url, headers={"user-agent": "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0) AppleWebKit/537.36 "
-                                                        "(KHTML, like Gecko) Chrome/51.0.2704.64 Safari/537.36"})
+    response = requests.get(url, headers={'User-Agent': UserAgent().chrome})
     soup = BeautifulSoup(response.text, 'lxml')
+
+    # проверка на ошибку
+    if response.status_code != 200:
+        print(colored(">>> Russian.rt.com returned bad answer. Access denied, 403.", "red"))
+        return {"error": "Russian.rt.com returned bad answer. Access denied, 403."}
 
     # парсинг нужных блоков
     article = soup.select('.article__heading_article-page')
