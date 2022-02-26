@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+from selenium.webdriver.support.wait import WebDriverWait
 from keras.preprocessing.sequence import pad_sequences
 from jsonrpc import JSONRPCResponseManager, dispatcher
 from werkzeug.wrappers import Request, Response
 from keras.layers import Dense, Embedding, LSTM
 from keras.preprocessing.text import Tokenizer
 from keras.callbacks import ModelCheckpoint
+from selenium.webdriver.common.by import By
 from werkzeug.serving import run_simple
 from fake_useragent import UserAgent
 from collections import OrderedDict
@@ -28,10 +30,10 @@ import re
 import os
 
 # максимальное количество слов в словаре токенизатора
-num_words = 50000
+num_words = 500
 
 # максимальная длина новости
-max_news_len = 1500
+max_news_len = 150
 
 # количество классов новостей, считается ниже
 nb_classes = 10
@@ -63,7 +65,7 @@ chrome_options.add_argument('--no-sandbox')
 chrome_options.add_argument('--window-size=1920,1080')
 chrome_options.add_argument('--headless')
 chrome_options.add_argument('--disable-gpu')
-driver = webdriver.Chrome(chrome_options=chrome_options)
+driver = webdriver.Chrome(options=chrome_options)
 
 
 def file_cleaner(pandasf, column_array):
@@ -275,10 +277,23 @@ def parse_site(url):
     response = requests.get(url, headers={'User-Agent': UserAgent().chrome})
     soup = BeautifulSoup(response.text, 'lxml')
 
-    # проверка на ошибку
-    if response.status_code != 200:
-        print(colored(">>> Russian.rt.com returned bad answer. Access denied, 403.", "red"))
-        return {"error": "Russian.rt.com returned bad answer. Access denied, 403."}
+    error = False
+
+    # проверка на ошибку 403
+    if response.status_code == 403:
+        print(colored(">>> Access denied, error 403, trying selenium...", "red"))
+        error = True
+
+    # проверка на DDOS-GUARD
+    elif response.status_code == 200:
+        if soup.select_one('title') == "DDOS-GUARD":
+            print(colored(">>> Access denied, DDOS-Guard blocked access (title=DDOS-GUARD), trying selenium...", "red"))
+            error = True
+
+    # проверка на другие ошибки
+    elif response.status_code not in {200, 403}:
+        print(colored("Error {}, trying selenium...".format(response.status_code), "red"))
+        error = True
 
     # парсинг нужных блоков
     article = soup.select('.article__heading_article-page')
