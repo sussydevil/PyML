@@ -1,5 +1,4 @@
 /venv/
-/rt_clean.pkl
 /rt.pkl
 /lstm_model.h5
 /categories.pkl

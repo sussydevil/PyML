@@ -26,10 +26,10 @@ import re
 import os
 
 # максимальное количество слов в словаре токенизатора
-num_words = 10000
+num_words = 50000
 
 # максимальная длина новости
-max_news_len = 250
+max_news_len = 1000
 
 # количество классов новостей, считается ниже
 nb_classes = 10
@@ -83,6 +83,7 @@ def text_cleaner(text):
     Вход: грязный текст
     Выход: очищенный текст
     """
+
     # строчные буквы
     text = text.lower()
 
@@ -109,7 +110,7 @@ def train():
           "\n - Max length of news: {1}"
           "\n - Learn percentage (volume): {2}".format(num_words, max_news_len, learn_percentage))
     print("-----------------------------------------------------------------")
-    sleep(2)
+    sleep(1)
     print(colored(">>> Reading {0}...", "yellow").format(original_csv_path))
     pandasf = pd.read_csv(original_csv_path)
     print(colored(">>> Reading done.", "green"))
@@ -181,7 +182,7 @@ def train():
     model_lstm = Sequential()
     model_lstm.add(Embedding(num_words, 32, input_length=max_news_len))
     model_lstm.add(LSTM(16))
-    model_lstm.add(Dense(10, activation='softmax'))
+    model_lstm.add(Dense(nb_classes, activation='softmax'))
     model_lstm.compile(optimizer='adam',
                        loss='categorical_crossentropy',
                        metrics=['accuracy'])
@@ -215,6 +216,7 @@ def get_key(d, value):
     Вход: словарь, значение
     Выход: ключ
     """
+
     for k, v in d.items():
         if v == value:
             return k
@@ -284,7 +286,7 @@ def parse_site(url):
     for i in article_text:
         parsed_text = parsed_text + " " + i.text
 
-    all_text = parsed_article + parsed_summary + parsed_text
+    all_text = parsed_article + " " + parsed_summary + " " + parsed_text
     api_answer = api(all_text)
 
     return api_answer
@@ -295,6 +297,7 @@ def application(request):
     """
     Функция JSON-RPC сервера
     """
+
     dispatcher["text"] = lambda text: api(text)
     dispatcher["link"] = lambda link: parse_site(link)
     response = JSONRPCResponseManager.handle(request.data, dispatcher)
@@ -306,6 +309,7 @@ def main():
     """
     Главная функция - парсинг параметров и меню
     """
+
     print("AI news analyzer started (v.0.9.0)...")
     sleep(1)
     global gl_model, gl_categories, gl_tokenizer
@@ -358,7 +362,6 @@ def main():
         print(colored(">>> Model loaded successfully...", "green"))
 
         run_simple('0.0.0.0', 4000, application)
-
         exit(0)
 
     else:

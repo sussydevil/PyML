@@ -4,7 +4,6 @@ pymorphy2~=0.9.1
 tensorflow~=2.8.0
 keras~=2.8.0
 scikit-learn~=1.0.2
-matplotlib~=3.5.1
 termcolor~=1.1.0
 requests~=2.27.1
 Werkzeug~=2.0.3
