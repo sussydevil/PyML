@@ -11,6 +11,7 @@ from collections import OrderedDict
 from keras.models import Sequential
 from keras.models import load_model
 from keras.utils import np_utils
+from selenium import webdriver
 from termcolor import colored
 from bs4 import BeautifulSoup
 from keras import utils
@@ -55,6 +56,14 @@ tokenizer_path = "tokenizer.json"
 
 # глобальные переменные
 global gl_model, gl_tokenizer, gl_categories
+
+# настройки selenium
+chrome_options = webdriver.ChromeOptions()
+chrome_options.add_argument('--no-sandbox')
+chrome_options.add_argument('--window-size=1920,1080')
+chrome_options.add_argument('--headless')
+chrome_options.add_argument('--disable-gpu')
+driver = webdriver.Chrome(chrome_options=chrome_options)
 
 
 def file_cleaner(pandasf, column_array):
