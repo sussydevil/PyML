@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 from keras import utils
 from time import sleep
 
+import selenium.common.exceptions
 import keras.preprocessing.text
 import pandas as pd
 import numpy as np
@@ -64,6 +65,8 @@ chrome_options = webdriver.ChromeOptions()
 chrome_options.add_argument('--no-sandbox')
 chrome_options.add_argument('--window-size=1920,1080')
 chrome_options.add_argument('--headless')
+chrome_options.add_experimental_option("excludeSwitches", ['enable-automation'])
+chrome_options.add_argument(f'user-agent={UserAgent().chrome}')
 chrome_options.add_argument('--disable-gpu')
 driver = webdriver.Chrome(options=chrome_options)
 
@@ -286,7 +289,7 @@ def parse_site(url):
 
     # проверка на DDOS-GUARD
     elif response.status_code == 200:
-        if soup.select_one('title') == "DDOS-GUARD":
+        if soup.select_one('title').text == "DDOS-GUARD":
             print(colored(">>> Access denied, DDOS-Guard blocked access (title=DDOS-GUARD), trying selenium...", "red"))
             error = True
 
@@ -294,6 +297,41 @@ def parse_site(url):
     elif response.status_code not in {200, 403}:
         print(colored("Error {}, trying selenium...".format(response.status_code), "red"))
         error = True
+
+    # если ошибка, то используется selenium
+    if error:
+        driver.get(url)
+
+        # парсинг
+        driver_data = driver.page_source
+        soup = BeautifulSoup(driver_data, 'lxml')
+
+        # проверка на DDOS-GUARD
+        if soup.select_one('title').text == "DDOS-GUARD":
+            print(colored(">>> Wait for redirecting to rt.com page...", "yellow"))
+            wait = WebDriverWait(driver, 5)
+
+            # ожидание переадресации
+            try:
+                wait.until(lambda driver2: driver2.find_element(by=By.TAG_NAME, value="title").text == "DDOS-GUARD")
+
+            except selenium.common.exceptions.TimeoutException:
+                print(colored(">>> Failed to parse data from rt.com by bs4, selenium.", "red"))
+                return {"error": "Failed to parse by bs4, selenium."}
+
+            # еще раз парсинг
+            soup = BeautifulSoup(driver.page_source, 'lxml')
+
+        # если элементы пустые, то ошибка
+        if soup.select_one(".article__heading_article-page") is None and \
+                soup.select_one('.article__summary_article-page') is None and \
+                soup.select_one('.article__text_article-page p') is None:
+            print(colored(">>> Failed to parse data from rt.com by bs4, selenium.", "red"))
+            return {"error": "Failed to parse by bs4, selenium."}
+
+        else:
+            print(colored(">>> Selenium received data successfully. Title is {0}"
+                          .format(soup.select_one(".article__heading_article-page")), "green"))
 
     # парсинг нужных блоков
     article = soup.select('.article__heading_article-page')
