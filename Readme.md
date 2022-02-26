@@ -11,8 +11,9 @@ https://github.com/ods-ai-ml4sg/proj_news_viz/releases/download/data/rt.csv.gz
 Установка:
 
 1) Скачивание с репозитория: `git clone https://github.com/sussydevil/PyML.git`
-2) Сборка образа: `docker build --tag aianalyzer .`
-3) Запуск командой: `docker run -p 4000:4000 aianalyzer`
+2) Вход в папку: `cd PyML`
+3) Сборка образа: `docker build --tag aianalyzer .`
+4) Запуск командой: `docker run -p 4000:4000 aianalyzer`
 
 Пример клиентских запросов 2 методов находится в файле **jrpc_client.py**
 
