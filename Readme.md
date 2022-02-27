@@ -10,7 +10,8 @@ https://github.com/ods-ai-ml4sg/proj_news_viz/releases/download/data/rt.csv.gz
 -----
 Установка:
 
-1) Скачивание с репозитория: `git clone https://github.com/sussydevil/PyML.git`
+1) Скачивание с репозитория: `git clone https://github.com/sussydevil/PyML.git`.
+Должен быть установлен Git LFS для скачивания большого *.csv файла. Проверка Git LFS - `git lfs install`, если его нет, нужно установить.
 2) Вход в папку: `cd PyML`
 3) Сборка образа: `docker build --tag aianalyzer .`
 4) Запуск командой: `docker run -p 4000:4000 aianalyzer`
