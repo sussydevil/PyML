@@ -30,6 +30,8 @@ import pickle
 import re
 import os
 
+ua = UserAgent()
+
 # максимальное количество слов в словаре токенизатора
 num_words = 50000
 
@@ -67,7 +69,7 @@ chrome_options.add_argument('--disable-dev-shm-usage')
 chrome_options.add_argument('--window-size=1920,1080')
 chrome_options.add_argument('--headless')
 chrome_options.add_experimental_option("excludeSwitches", ['enable-automation'])
-chrome_options.add_argument(f'user-agent={UserAgent().chrome}')
+chrome_options.add_argument(f'user-agent={ua.random}')
 chrome_options.add_argument('--disable-gpu')
 driver = webdriver.Chrome(options=chrome_options)
 
@@ -278,7 +280,7 @@ def parse_site(url):
     """
 
     # получение html сайта
-    response = requests.get(url, headers={'User-Agent': UserAgent().chrome})
+    response = requests.get(url, headers={'User-Agent': ua.random})
     soup = BeautifulSoup(response.text, 'lxml')
 
     error = False
