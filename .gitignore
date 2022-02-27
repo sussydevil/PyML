@@ -3,3 +3,4 @@
 /lstm_model.h5
 /categories.pkl
 /tokenizer.json
+/jrpc2_client.py

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from selenium.webdriver.chrome.webdriver import WebDriver
+from selenium.webdriver.support.wait import WebDriverWait
 from keras.preprocessing.sequence import pad_sequences
 from jsonrpc import JSONRPCResponseManager, dispatcher
 from werkzeug.wrappers import Request, Response
@@ -11,11 +13,13 @@ from collections import OrderedDict
 from keras.models import Sequential
 from keras.models import load_model
 from keras.utils import np_utils
+from selenium import webdriver
 from termcolor import colored
 from bs4 import BeautifulSoup
 from keras import utils
 from time import sleep
 
+import selenium.common.exceptions
 import keras.preprocessing.text
 import pandas as pd
 import numpy as np
@@ -26,11 +30,13 @@ import pickle
 import re
 import os
 
+ua = UserAgent()
+
 # максимальное количество слов в словаре токенизатора
 num_words = 50000
 
 # максимальная длина новости
-max_news_len = 1500
+max_news_len = 2000
 
 # количество классов новостей, считается ниже
 nb_classes = 10
@@ -55,6 +61,17 @@ tokenizer_path = "tokenizer.json"
 
 # глобальные переменные
 global gl_model, gl_tokenizer, gl_categories
+
+# настройки selenium
+chrome_options = webdriver.ChromeOptions()
+chrome_options.add_argument('--no-sandbox')
+chrome_options.add_argument('--disable-dev-shm-usage')
+chrome_options.add_argument('--window-size=1920,1080')
+chrome_options.add_argument('--headless')
+chrome_options.add_experimental_option("excludeSwitches", ['enable-automation'])
+chrome_options.add_argument(f'user-agent={ua.random}')
+chrome_options.add_argument('--disable-gpu')
+driver = webdriver.Chrome(options=chrome_options)
 
 
 def file_cleaner(pandasf, column_array):
@@ -263,13 +280,76 @@ def parse_site(url):
     """
 
     # получение html сайта
-    response = requests.get(url, headers={'User-Agent': UserAgent().chrome})
+    response = requests.get(url, headers={'User-Agent': ua.random})
     soup = BeautifulSoup(response.text, 'lxml')
 
-    # проверка на ошибку
-    if response.status_code != 200:
-        print(colored(">>> Russian.rt.com returned bad answer. Access denied, 403.", "red"))
-        return {"error": "Russian.rt.com returned bad answer. Access denied, 403."}
+    error = False
+
+    # проверка на ошибку 403
+    if response.status_code == 403:
+        print(colored(">>> Access denied, error 403, trying selenium...", "red"))
+        error = True
+
+    # проверка на DDOS-GUARD
+    elif response.status_code == 200:
+        if soup.select_one('title').text == "DDOS-GUARD":
+            print(colored(">>> Access denied, DDOS-Guard blocked access (title=DDOS-GUARD), trying selenium...", "red"))
+            error = True
+
+    # проверка на другие ошибки
+    elif response.status_code not in {200, 403}:
+        print(colored("Error {}, trying selenium...".format(response.status_code), "red"))
+        error = True
+
+    # если ошибка, то используется selenium
+    if error:
+        driver.get(url)
+
+        # парсинг
+        driver_data = driver.page_source
+        soup = BeautifulSoup(driver_data, 'lxml')
+
+        # проверка на DDOS-GUARD
+        if soup.select_one('title').text == "DDOS-GUARD":
+            print(colored(">>> Wait for redirecting to rt.com page...", "yellow"))
+
+            wait = WebDriverWait(driver, 10)
+
+            def page_load_waiter(driver2: WebDriver):
+                """
+                Функция ожидания загрузки страницы
+                Вход: WebDriver
+                Выход: True, False
+                """
+                soup2 = BeautifulSoup(driver2.page_source, 'lxml')
+                return \
+                    soup2.select_one('.article__heading_article-page') \
+                    is not None and soup2.select_one('.article__summary_article-page') \
+                    is not None and soup2.select_one('.article__text_article-page p') \
+                    is not None
+
+            # ожидание загрузки страницы
+            try:
+                wait.until(page_load_waiter)
+
+            except selenium.common.exceptions.TimeoutException:
+                print(colored(">>> Failed to load data (too much time) from rt.com by bs4, selenium.", "red"))
+
+                return {"error": "Failed to load (too much time) by bs4, selenium."}
+
+            # еще раз парсинг
+            soup = BeautifulSoup(driver.page_source, 'lxml')
+
+        # если элементы пустые, то ошибка
+        if soup.select_one(".article__heading_article-page") is None and \
+                soup.select_one('.article__summary_article-page') is None and \
+                soup.select_one('.article__text_article-page p') is None:
+            print(colored(">>> Failed to parse data from rt.com by bs4, selenium.", "red"))
+            return {"error": "Failed (2) to parse by bs4, selenium."}
+
+        else:
+            print(colored(">>> Selenium received data successfully. Title is {0}"
+                          .format(soup.select_one(".article__heading_article-page").text), "green"))
 
     # парсинг нужных блоков
     article = soup.select('.article__heading_article-page')
