@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.support.wait import WebDriverWait
 from keras.preprocessing.sequence import pad_sequences
 from jsonrpc import JSONRPCResponseManager, dispatcher
@@ -6,7 +7,6 @@ from werkzeug.wrappers import Request, Response
 from keras.layers import Dense, Embedding, LSTM
 from keras.preprocessing.text import Tokenizer
 from keras.callbacks import ModelCheckpoint
-from selenium.webdriver.common.by import By
 from werkzeug.serving import run_simple
 from fake_useragent import UserAgent
 from collections import OrderedDict
@@ -31,10 +31,10 @@ import re
 import os
 
 # максимальное количество слов в словаре токенизатора
-num_words = 500
+num_words = 50000
 
 # максимальная длина новости
-max_news_len = 150
+max_news_len = 2000
 
 # количество классов новостей, считается ниже
 nb_classes = 10
@@ -63,6 +63,7 @@ global gl_model, gl_tokenizer, gl_categories
 # настройки selenium
 chrome_options = webdriver.ChromeOptions()
 chrome_options.add_argument('--no-sandbox')
+chrome_options.add_argument('--disable-dev-shm-usage')
 chrome_options.add_argument('--window-size=1920,1080')
 chrome_options.add_argument('--headless')
 chrome_options.add_experimental_option("excludeSwitches", ['enable-automation'])
@@ -309,15 +310,30 @@ def parse_site(url):
         # проверка на DDOS-GUARD
         if soup.select_one('title').text == "DDOS-GUARD":
             print(colored(">>> Wait for redirecting to rt.com page...", "yellow"))
-            wait = WebDriverWait(driver, 5)
 
-            # ожидание переадресации
+            wait = WebDriverWait(driver, 10)
+
+            def page_load_waiter(driver2: WebDriver):
+                """
+                Функция ожидания загрузки страницы
+                Вход: WebDriver
+                Выход: True, False
+                """
+                soup2 = BeautifulSoup(driver2.page_source, 'lxml')
+                return \
+                    soup2.select_one('.article__heading_article-page') \
+                    is not None and soup2.select_one('.article__summary_article-page') \
+                    is not None and soup2.select_one('.article__text_article-page p') \
+                    is not None
+
+            # ожидание загрузки страницы
             try:
-                wait.until(lambda driver2: driver2.find_element(by=By.TAG_NAME, value="title").text == "DDOS-GUARD")
+                wait.until(page_load_waiter)
 
             except selenium.common.exceptions.TimeoutException:
-                print(colored(">>> Failed to parse data from rt.com by bs4, selenium.", "red"))
-                return {"error": "Failed to parse by bs4, selenium."}
+                print(colored(">>> Failed to load data (too much time) from rt.com by bs4, selenium.", "red"))
+
+                return {"error": "Failed to load (too much time) by bs4, selenium."}
 
             # еще раз парсинг
             soup = BeautifulSoup(driver.page_source, 'lxml')
@@ -327,11 +343,11 @@ def parse_site(url):
                 soup.select_one('.article__summary_article-page') is None and \
                 soup.select_one('.article__text_article-page p') is None:
             print(colored(">>> Failed to parse data from rt.com by bs4, selenium.", "red"))
-            return {"error": "Failed to parse by bs4, selenium."}
+            return {"error": "Failed (2) to parse by bs4, selenium."}
 
         else:
             print(colored(">>> Selenium received data successfully. Title is {0}"
-                          .format(soup.select_one(".article__heading_article-page")), "green"))
+                          .format(soup.select_one(".article__heading_article-page").text), "green"))
 
     # парсинг нужных блоков
     article = soup.select('.article__heading_article-page')
