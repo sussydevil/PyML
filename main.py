@@ -33,10 +33,10 @@ import os
 ua = UserAgent()
 
 # максимальное количество слов в словаре токенизатора
-num_words = 50000
+num_words = 100000
 
 # максимальная длина новости
-max_news_len = 2000
+max_news_len = 2500
 
 # количество классов новостей, считается ниже
 nb_classes = 10
@@ -80,6 +80,7 @@ def file_cleaner(pandasf, column_array):
     Вход: исходный dataset, массив названий колонок
     Выход: очищенный dataset
     """
+
     for i in column_array:
         pandasf.drop(i, axis='columns', inplace=True)
 
@@ -237,6 +238,7 @@ def get_key(d, value):
 
     for k, v in d.items():
         if v == value:
+
             return k
 
 
@@ -345,6 +347,7 @@ def parse_site(url):
                 soup.select_one('.article__summary_article-page') is None and \
                 soup.select_one('.article__text_article-page p') is None:
             print(colored(">>> Failed to parse data from rt.com by bs4, selenium.", "red"))
+
             return {"error": "Failed (2) to parse by bs4, selenium."}
 
         else:
