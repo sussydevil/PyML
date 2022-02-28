@@ -1,3 +1,4 @@
+-----
 Dataset — новости RT: 
 https://github.com/ods-ai-ml4sg/proj_news_viz/releases/download/data/rt.csv.gz 
 
@@ -24,4 +25,5 @@ docker-compose не умеет сохранять state (https://stackoverflow.c
 
 Скрипт в Docker настроен на train&run, сначала обучение, затем поднятие API. В последующие разы запускается сразу API.
 Обучение может занять достаточное время (до часа).
+-----
 
