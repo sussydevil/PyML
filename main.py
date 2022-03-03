@@ -75,6 +75,17 @@ chrome_options.add_argument('--disable-gpu')
 driver = webdriver.Chrome(options=chrome_options)
 
 
+def print_colored(text, color):
+    """
+    Функция для цветного вывода текста
+    Вход: текст, цвет
+    """
+
+    print(colored(text, color))
+
+    return 0
+
+
 def file_cleaner(pandasf, column_array):
     """
     Очистка ненужных колонок и пустых строк
@@ -124,26 +135,26 @@ def train():
 
     # чтение файла, удаление ненужной информации (даты, репосты и т.д.), очистка null строк
     print("-----------------------------------------------------------------")
-    print(colored("Train module started...", "yellow"))
+    print_colored("Train module started...", "yellow")
     print("Parameters: "
           "\n - Number of words: {0}"
           "\n - Max length of news: {1}"
           "\n - Learn percentage (volume): {2}".format(num_words, max_news_len, learn_percentage))
     print("-----------------------------------------------------------------")
     sleep(1)
-    print(colored(">>> Reading {0}...", "yellow").format(original_csv_path))
+    print_colored(">>> Reading {0}...".format(original_csv_path), "yellow")
     pandasf = pd.read_csv(original_csv_path)
-    print(colored(">>> Reading done.", "green"))
+    print_colored(">>> Reading done.", "green")
     print("-----------------------------------------------------------------")
 
     # очистка текста от символов и предлогов
-    print(colored(">>> Cleaning file of symbols, pretexts and unusable columns...", "yellow"))
+    print_colored(">>> Cleaning file of symbols, pretexts and unusable columns...", "yellow")
     pandasf = file_cleaner(pandasf,
                            ['authors', 'date', 'url', 'edition', 'reposts_fb', 'reposts_vk', 'reposts_ok',
                             'reposts_twi', 'reposts_lj', 'reposts_tg', 'likes', 'views', 'comm_count'])
     pandasf['text'] = pandasf.apply(lambda x: text_cleaner(x['text']), axis=1)
     pandasf['title'] = pandasf.apply(lambda x: text_cleaner(x['title']), axis=1)
-    print(colored(">>> Cleaning file of symbols, pretexts and unusable columns done.", "green"))
+    print_colored(">>> Cleaning file of symbols, pretexts and unusable columns done.", "green")
     print("-----------------------------------------------------------------")
 
     # выделение категорий
@@ -187,16 +198,16 @@ def train():
     print("-----------------------------------------------------------------")
 
     # подготовка данных
-    print(colored(">>> Dataset preparation...", "yellow"))
+    print_colored(">>> Dataset preparation...", "yellow")
     news_text = pandasf['title'] + pandasf['text']
     y_train = utils.np_utils.to_categorical(pandasf['topics_code'], nb_classes)
     tokenizer = Tokenizer(num_words=num_words)
     tokenizer.fit_on_texts(news_text)
     sequences = tokenizer.texts_to_sequences(news_text)
     x_train = pad_sequences(sequences, maxlen=max_news_len)
-    print(colored(">>> Dataset preparation done.", "green"))
+    print_colored(">>> Dataset preparation done.", "green")
     print("-----------------------------------------------------------------")
-    print(colored(">>> Learning started.", "yellow"))
+    print_colored(">>> Learning started.", "yellow")
 
     # LSTM нейронная сеть
     model_lstm = Sequential()
@@ -226,7 +237,7 @@ def train():
     with open(tokenizer_path, "w") as f:
         f.write(tokenizer.to_json())
 
-    print(colored(">>> Learning done. Model saved to lstm_model.h5.", "green"))
+    print_colored(">>> Learning done. Model saved to lstm_model.h5.", "green")
     print("-----------------------------------------------------------------")
 
 
@@ -290,18 +301,18 @@ def parse_site(url):
 
     # проверка на ошибку 403
     if response.status_code == 403:
-        print(colored(">>> Access denied, error 403, trying selenium...", "red"))
+        print_colored(">>> Access denied, error 403, trying selenium...", "red")
         error = True
 
     # проверка на DDOS-GUARD
     elif response.status_code == 200:
         if soup.select_one('title').text == "DDOS-GUARD":
-            print(colored(">>> Access denied, DDOS-Guard blocked access (title=DDOS-GUARD), trying selenium...", "red"))
+            print_colored(">>> Access denied, DDOS-Guard blocked access (title=DDOS-GUARD), trying selenium...", "red")
             error = True
 
     # проверка на другие ошибки
     elif response.status_code not in {200, 403}:
-        print(colored("Error {}, trying selenium...".format(response.status_code), "red"))
+        print_colored("Error {}, trying selenium...".format(response.status_code), "red")
         error = True
 
     # если ошибка, то используется selenium
@@ -314,7 +325,7 @@ def parse_site(url):
 
         # проверка на DDOS-GUARD
         if soup.select_one('title').text == "DDOS-GUARD":
-            print(colored(">>> Wait for redirecting to rt.com page...", "yellow"))
+            print_colored(">>> Wait for redirecting to rt.com page...", "yellow")
 
             wait = WebDriverWait(driver, 10)
 
@@ -336,7 +347,7 @@ def parse_site(url):
                 wait.until(page_load_waiter)
 
             except selenium.common.exceptions.TimeoutException:
-                print(colored(">>> Failed to load data (too much time) from rt.com by bs4, selenium.", "red"))
+                print_colored(">>> Failed to load data (too much time) from rt.com by bs4, selenium.", "red")
 
                 return {"error": "Failed to load (too much time) by bs4, selenium."}
 
@@ -347,13 +358,13 @@ def parse_site(url):
         if soup.select_one(".article__heading_article-page") is None and \
                 soup.select_one('.article__summary_article-page') is None and \
                 soup.select_one('.article__text_article-page p') is None:
-            print(colored(">>> Failed to parse data from rt.com by bs4, selenium.", "red"))
+            print_colored(">>> Failed to parse data from rt.com by bs4, selenium.", "red")
 
             return {"error": "Failed (2) to parse by bs4, selenium."}
 
         else:
-            print(colored(">>> Selenium received data successfully. Title is {0}"
-                          .format(soup.select_one(".article__heading_article-page").text), "green"))
+            print_colored(">>> Selenium received data successfully. Title is {0}"
+                          .format(soup.select_one(".article__heading_article-page").text), "green")
 
     # парсинг нужных блоков
     article = soup.select('.article__heading_article-page')
@@ -410,7 +421,7 @@ def main():
         exit(0)
 
     elif parser.parse_args().mode == "run":
-        print(colored(">>> Loading model for recognizing...", "yellow"))
+        print_colored(">>> Loading model for recognizing...", "yellow")
 
         # загрузка модели
         gl_model = load_model(model_lstm_save_path, compile=True)
@@ -423,7 +434,7 @@ def main():
         # загрузка категорий
         with open(categories_path, 'rb') as f:
             gl_categories = pickle.load(f)
-        print(colored(">>> Model loaded successfully...", "green"))
+        print_colored(">>> Model loaded successfully...", "green")
 
         run_simple('0.0.0.0', 4000, application)
         exit(0)
@@ -432,10 +443,10 @@ def main():
         if not os.path.exists(model_lstm_save_path):
             train()
         else:
-            print(colored('>>> Model found. Skipping training. '
-                          'If you to train a new model, reload app with "-mode train"', "green"))
+            print_colored('>>> Model found. Skipping training. '
+                          'If you to train a new model, reload app with "-mode train"', "green")
 
-        print(colored(">>> Loading model for recognizing...", "yellow"))
+        print_colored(">>> Loading model for recognizing...", "yellow")
 
         # загрузка модели
         gl_model = load_model(model_lstm_save_path, compile=True)
@@ -448,34 +459,34 @@ def main():
         # загрузка категорий
         with open(categories_path, 'rb') as f:
             gl_categories = pickle.load(f)
-        print(colored(">>> Model loaded successfully...", "green"))
+        print_colored(">>> Model loaded successfully...", "green")
 
         run_simple('0.0.0.0', 4000, application)
         exit(0)
 
     else:
-        print(colored("Argv not recognized. Then menu is on.", "red"))
+        print_colored("Argv not recognized. Then menu is on.", "red")
 
     error = False
 
     while True:
         if not error:
-            print(colored("Please choose what you want to do:\n1) Train model\n2) Run model (enable API)", "yellow"))
+            print_colored("Please choose what you want to do:\n1) Train model\n2) Run model (enable API)", "yellow")
         answer = input('>>> ')
         try:
             answer = int(answer)
         except ValueError:
-            print(colored('Convert error to int. Try again.', 'red'))
+            print_colored('Convert error to int. Try again.', 'red')
             error = True
             continue
         if answer not in {1, 2}:
-            print(colored("Selection error. Try again.", "red"))
+            print_colored("Selection error. Try again.", "red")
             error = True
             continue
         if answer == 1:
             train()
         if answer == 2:
-            print(colored(">>> Loading model for recognizing...", "yellow"))
+            print_colored(">>> Loading model for recognizing...", "yellow")
 
             # загрузка модели
             gl_model = load_model(model_lstm_save_path, compile=True)
@@ -488,7 +499,7 @@ def main():
             # загрузка категорий
             with open(categories_path, 'rb') as f:
                 gl_categories = pickle.load(f)
-            print(colored(">>> Model loaded...", "green"))
+            print_colored(">>> Model loaded...", "green")
 
             run_simple('0.0.0.0', 4000, application)
 
