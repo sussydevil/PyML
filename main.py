@@ -199,7 +199,7 @@ def train():
 
     # подготовка данных
     print_colored(">>> Dataset preparation...", "yellow")
-    news_text = pandasf['title'] + pandasf['text']
+    news_text = pandasf['title'] + " " + pandasf['text']
     y_train = utils.np_utils.to_categorical(pandasf['topics_code'], nb_classes)
     tokenizer = Tokenizer(num_words=num_words)
     tokenizer.fit_on_texts(news_text)
