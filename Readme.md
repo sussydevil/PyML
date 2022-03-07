@@ -20,9 +20,7 @@ https://github.com/ods-ai-ml4sg/proj_news_viz/releases/download/data/rt.csv.gz
 
 Пример клиентских запросов 2 методов находится в файле **jrpc_client.py**
 
-P.S.
-docker-compose не умеет сохранять state (https://stackoverflow.com/questions/44480740/how-to-save-a-docker-container-state), 
-поэтому был использован Docker.
+P.S. docker-compose не умеет сохранять state, поэтому был использован docker.
 
 Скрипт в Docker настроен на train&run, сначала обучение, затем поднятие API. В последующие разы запускается сразу API.
 Обучение может занять достаточное время (до часа).
